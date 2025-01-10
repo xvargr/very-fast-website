@@ -5,7 +5,7 @@ import (
 	"html"
 	"net/http"
 
-	frouter "github.com/xvargr/very-fast-website/internal/file-router"
+	filerouter "github.com/xvargr/very-fast-website/internal/file-router"
 )
 
 func handleWithFileRouter(w http.ResponseWriter, request *http.Request) {
@@ -15,7 +15,7 @@ func handleWithFileRouter(w http.ResponseWriter, request *http.Request) {
 func main() {
 	mux := http.NewServeMux()
 
-	frouter.Route(mux)
+	filerouter.Route(mux)
 
 	http.ListenAndServe(":8080", mux)
 }
