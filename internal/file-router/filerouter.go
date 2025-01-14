@@ -2,19 +2,22 @@ package filerouter
 
 import (
 	"fmt"
-	"html"
 	"mime"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/xvargr/very-fast-website/internal/vdoc"
+	"golang.org/x/net/html"
 )
 
 type Document struct {
-	Path            string
-	Layouts         []string
-	CompiledContent string
-	Extension       string
+	URI        string
+	Path       string
+	Layouts    []string
+	VirtualDoc *vdoc.VirtualDocument
+	Extension  string
 }
 
 func Route(mux *http.ServeMux) {
@@ -23,11 +26,7 @@ func Route(mux *http.ServeMux) {
 		fmt.Println(time.Now().Format(time.DateTime), r.Method, requestUri)
 
 		doc := resolveDocument(requestUri)
-		fmt.Println(doc)
-		// doc.Compile()
 
-		// AddTypeHeader(w, doc)
-		// http.ServeFile(w, r, doc.Path)
 		doc.Serve(w, r)
 	})
 }
@@ -37,11 +36,9 @@ func resolveDocument(path string) Document {
 	isDirectAccess := strings.Contains(path, ".")
 	docPath := "web" + strings.TrimRight(path, "/")
 	docPath = strings.Replace(docPath, "..", "", -1)
-	fmt.Println("DocPath", docPath)
 
 	filename := "index"
-	split := strings.Split(docPath, "/")
-	fmt.Println("Split", split, len(split), split[len(split)-1])
+	split := strings.Split(path, "/")
 	if split[len(split)-1] != "" {
 		filename = split[len(split)-1]
 	}
@@ -53,20 +50,23 @@ func resolveDocument(path string) Document {
 		ext = strings.Split(filename, ".")[1]
 	}
 
-	fmt.Println("filename", filename, "ext", ext)
-
 	return Document{
+		URI:       path,
 		Path:      docPath,
 		Layouts:   evaluateLayouts(path),
 		Extension: ext,
 	}
+
 }
 
 func evaluateLayouts(path string) (layouts []string) {
 	fpath := "web"
-	for _, dir := range strings.Split(path, "/") {
-		fpath = fpath + dir + "/"
+	for idx, dir := range strings.Split(path, "/") {
+		if path == "/" && idx == 1 {
+			continue
+		}
 
+		fpath = fpath + dir + "/"
 		dirContent, _ := os.ReadDir(fpath)
 		for _, file := range dirContent {
 			if file.Name() == "_layout.html" {
@@ -78,29 +78,32 @@ func evaluateLayouts(path string) (layouts []string) {
 	return layouts
 }
 
-// func (doc Document) String() string {
-// 	return fmt.Sprintf("Document: Path: %s, Layouts: %v, Extension: %s,", doc.Path, doc.Layouts, doc.Extension)
-// }
-
 func (doc *Document) Compile() {
-	fmt.Println("Compiling", doc)
 	for _, layout := range doc.Layouts {
-		fmt.Println("Layout", layout)
-		rawContent, _ := os.ReadFile(layout)
-		// content := string(rawContent)
+		// fmt.Println("layout", layout)
+		layoutContent, _ := os.ReadFile(layout)
+		extr := vdoc.Extract(layoutContent)
 
-		if doc.CompiledContent == "" {
-			doc.CompiledContent = string(rawContent)
-		} else {
-			doc.CompiledContent = strings.Replace(doc.CompiledContent, "{{content}}", strings.TrimSpace(string(rawContent)), -1)
+		if doc.VirtualDoc == nil {
+			doc.VirtualDoc = vdoc.NewVirtualDocument()
 		}
+
+		doc.VirtualDoc.Merge(extr)
 	}
 
-	fmt.Println("Compiled", doc.CompiledContent)
+	mainContent, err := os.ReadFile(doc.Path)
+	if err != nil {
+		fmt.Println("failed to read file", err)
+		mainContent, _ = os.ReadFile("web/404.html")
+	}
+
+	// fmt.Println("main", doc.Path)
+	extr := vdoc.Extract(mainContent)
+	doc.VirtualDoc.Merge(extr)
 }
 
 func (doc *Document) IsDirectAccess() bool {
-	return strings.Contains(doc.Path, ".")
+	return strings.Contains(doc.URI, ".")
 }
 
 func (doc *Document) AddTypeHeader(w http.ResponseWriter) {
@@ -113,14 +116,7 @@ func (doc *Document) Serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	doc.Compile()
 	doc.AddTypeHeader(w)
-	w.Write([]byte(doc.CompiledContent))
+	w.Write([]byte(doc.VirtualDoc.RenderHtml()))
 }
-
-// func (doc *Document) addContent() {
-// 	content, _ := os.ReadFile(doc.Path)
-// }
-
-// func AddTypeHeader(w http.ResponseWriter, doc Document) string {
-// 	return mime.TypeByExtension("." + doc.Extension)
-// }
