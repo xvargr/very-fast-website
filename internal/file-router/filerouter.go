@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
+	"github.com/xvargr/very-fast-website/internal/logger"
 	"github.com/xvargr/very-fast-website/internal/vdoc"
 	"golang.org/x/net/html"
 )
@@ -23,7 +23,7 @@ type Document struct {
 func Route(mux *http.ServeMux) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		requestUri := html.EscapeString(r.RequestURI)
-		fmt.Println(time.Now().Format(time.DateTime), r.Method, requestUri)
+		logger.Console(logger.SeverityNormal, fmt.Sprintf("%s %s", r.Method, requestUri))
 
 		doc := resolveDocument(requestUri)
 
@@ -93,7 +93,7 @@ func (doc *Document) Compile() {
 
 	mainContent, err := os.ReadFile(doc.Path)
 	if err != nil {
-		fmt.Println("failed to read file", err)
+		logger.Console(logger.SeverityError, fmt.Sprintf("failed to read file %s", doc.Path))
 		mainContent, _ = os.ReadFile("web/404.html")
 	}
 
@@ -118,5 +118,7 @@ func (doc *Document) Serve(w http.ResponseWriter, r *http.Request) {
 
 	doc.Compile()
 	doc.AddTypeHeader(w)
+	// doc.VirtualDoc.Render(&w)
+	// html.Render(w, doc.VirtualDoc.RenderHtml())
 	w.Write([]byte(doc.VirtualDoc.RenderHtml()))
 }

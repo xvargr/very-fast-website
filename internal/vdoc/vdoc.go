@@ -2,9 +2,9 @@ package vdoc
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/xvargr/very-fast-website/internal/logger"
 	"golang.org/x/net/html"
 )
 
@@ -76,7 +76,7 @@ func NewVirtualDocument() *VirtualDocument {
 func (doc *VirtualDocument) RenderHtml() string {
 	html, err := doc.doc.Html()
 	if err != nil {
-		fmt.Println("failed to generate html ", err)
+		logger.Console(logger.SeverityError, "failed to generate html "+err.Error())
 	}
 
 	return html
@@ -85,7 +85,7 @@ func (doc *VirtualDocument) RenderHtml() string {
 func Extract(raw []byte) *VirtualExtractor {
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(raw))
 	if err != nil {
-		fmt.Println("failed to parse html ", err)
+		logger.Console(logger.SeverityError, "failed to parse html "+err.Error())
 	}
 
 	head := doc.Find("head").Contents().FilterFunction(func(i int, s *goquery.Selection) bool {
@@ -127,7 +127,7 @@ func (d *VirtualDocument) Merge(extr *VirtualExtractor) {
 		s.AppendNodes(extr.HeadNodes...)
 	})
 	if extr.Meta.Title != "" {
-		d.doc.Find("title").Nodes[0].FirstChild.Data = extr.Meta.Title
+		d.doc.Find("title").Get(0).FirstChild.Data = extr.Meta.Title
 	}
 	// fmt.Println("merge after", d.RenderHtml())
 }
