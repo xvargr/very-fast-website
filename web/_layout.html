@@ -6,10 +6,15 @@
 </head>
 
 <body>
-  <a hx-get="/" hx-target="main">home</a>
-  <a href="/about" hx-target="main">about</a>
-  <a href="/about/us" hx-target="main">us</a>
-  <a href="/what/404" hx-target="main">404</a>
+  <div hx-target="main">
+    <a hx-get="/">home</a>
+    <a href="/about">about</a>
+    <a href="/about/us">about us</a>
+    <a href="/about/them">about them</a>
+    <a href="/about/them/foo">foo(404)</a>
+    <a href="/about/them/foo/bar">foobar</a>
+    <a href="/what/404">404</a>
+  </div>
 
   <div>before</div>
   <main>

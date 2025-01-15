@@ -2,7 +2,6 @@ package filerouter
 
 import (
 	"fmt"
-	"mime"
 	"net/http"
 	"os"
 	"strings"
@@ -12,62 +11,87 @@ import (
 )
 
 type Document struct {
-	URI         string
-	docPath     string
+	url         string
 	Layouts     []string
 	VirtualDoc  *vdoc.VirtualDocument
-	Extension   string
 	isHxRequest bool
 }
 
+const (
+	basePath         = "web/"
+	notFoundFilepath = "web/404.html"
+)
+
 func Route(mux *http.ServeMux) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		uri := r.URL.Path
-		logger.Console(logger.SeverityNormal, fmt.Sprintf("%s %s", r.Method, uri))
+		logger.Console(logger.SeverityNormal, fmt.Sprintf("%s %s", r.Method, r.URL.Path))
 
-		doc := resolveDocument(r)
-
-		doc.Serve(w, r)
+		if isAssetRequest(r) {
+			serveAsset(w, r)
+		} else {
+			doc := makeDocument(r)
+			doc.serve(w, r)
+		}
 	})
 }
 
-func resolveDocument(r *http.Request) Document {
-	var ext string
-	path := r.URL.Path
-	isDirectAccess := strings.Contains(path, ".")
-	isHxRequest := r.Header.Get("Hx-Request") == "true"
+func isAssetRequest(r *http.Request) bool {
+	return strings.Contains(r.URL.Path, ".")
+}
 
-	docPath := "web" + strings.TrimRight(path, "/")
-	docPath = strings.Replace(docPath, "..", "", -1)
+func serveAsset(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, basePath+r.URL.Path)
+}
 
-	filename := "index"
-	split := strings.Split(path, "/")
-	if split[len(split)-1] != "" {
-		filename = split[len(split)-1]
-	}
-
-	if !isDirectAccess {
-		docPath = docPath + "/" + filename + ".html"
-		ext = "html"
-	} else {
-		ext = strings.Split(filename, ".")[1]
-	}
-
-	return Document{
-		URI:         path,
-		docPath:     docPath,
+func makeDocument(r *http.Request) Document {
+	doc := Document{
+		url:         r.URL.Path,
 		VirtualDoc:  vdoc.NewVirtualDocument(),
 		Layouts:     evaluateLayouts(r),
-		Extension:   ext,
-		isHxRequest: isHxRequest,
+		isHxRequest: r.Header.Get("Hx-Request") == "true",
 	}
 
+	return doc
+}
+
+func (doc *Document) resolveContentPath() string {
+	parts := strings.Split(strings.Trim(doc.url, "/"), "/")
+
+	curPath := basePath
+	var filename string
+	if doc.url == "/" {
+		filename = "index.html"
+	} else {
+		filename = parts[len(parts)-1] + ".html"
+	}
+
+	for idx, part := range parts {
+		if part != "" {
+			curPath = curPath + part + "/"
+		}
+
+		if idx == len(parts)-2 {
+			_, err := os.Stat(curPath + filename)
+			if err == nil {
+				return curPath + filename
+			}
+		}
+		if idx == len(parts)-1 {
+			_, err := os.Stat(curPath + filename)
+			if err == nil {
+				return curPath + filename
+			}
+		}
+	}
+
+	logger.Console(logger.SeverityError, fmt.Sprintf("ERR 404 : %s", doc.url))
+	return notFoundFilepath
 }
 
 func evaluateLayouts(r *http.Request) (layouts []string) {
 	path := strings.TrimRight(r.URL.Path, "/")
 	pathSplit := strings.Split(path, "/")
-	fpath := "web"
+	filepath := basePath
 	isHxRequest := r.Header.Get("Hx-Request") == "true"
 
 	if isHxRequest && path != "/" {
@@ -75,11 +99,11 @@ func evaluateLayouts(r *http.Request) (layouts []string) {
 	}
 
 	for _, dir := range pathSplit {
-		fpath = fpath + dir + "/"
-		dirContent, _ := os.ReadDir(fpath)
+		filepath = filepath + dir + "/"
+		dirContent, _ := os.ReadDir(filepath)
 		for _, file := range dirContent {
 			if file.Name() == "_layout.html" {
-				layouts = append(layouts, fpath+file.Name())
+				layouts = append(layouts, filepath+file.Name())
 			}
 		}
 	}
@@ -91,50 +115,20 @@ func evaluateLayouts(r *http.Request) (layouts []string) {
 	return layouts
 }
 
-func evaluateDocPath(r *http.Request) string {
-
-	return ""
-}
-
-func (doc *Document) Compile() {
+func (doc *Document) compile() {
 	for _, layout := range doc.Layouts {
-		// logger.Console(logger.SeverityDebug, fmt.Sprintf("layout %s", layout))
 		layoutContent, _ := os.ReadFile(layout)
 		extr := vdoc.Extract(layoutContent)
 		doc.VirtualDoc.Merge(extr)
 	}
 
-	logger.Console(logger.SeverityDebug, fmt.Sprintf("docPath %s", doc.docPath))
-	// contentDirExists, err := os.Stat(doc.docPath)
-	// if os.IsNotExist(err) {
+	content, _ := os.ReadFile(doc.resolveContentPath())
 
-	// }
-
-	mainContent, err := os.ReadFile(doc.docPath)
-	if err != nil {
-		// logger.Console(logger.SeverityError, fmt.Sprintf("failed to read file %s", doc.docPath))
-		mainContent, _ = os.ReadFile("web/404.html")
-	}
-
-	extr := vdoc.Extract(mainContent)
+	extr := vdoc.Extract(content)
 	doc.VirtualDoc.Merge(extr)
 }
 
-func (doc *Document) IsDirectAccess() bool {
-	return strings.Contains(doc.URI, ".")
-}
-
-func (doc *Document) AddTypeHeader(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", mime.TypeByExtension("."+doc.Extension))
-}
-
-func (doc *Document) Serve(w http.ResponseWriter, r *http.Request) {
-	if doc.IsDirectAccess() {
-		http.ServeFile(w, r, doc.docPath)
-		return
-	}
-
-	doc.Compile()
-	doc.AddTypeHeader(w)
+func (doc *Document) serve(w http.ResponseWriter, r *http.Request) {
+	doc.compile()
 	w.Write([]byte(doc.VirtualDoc.RenderHtml()))
 }

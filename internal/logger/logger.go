@@ -32,12 +32,10 @@ var colors = map[Severity]string{
 }
 
 func Console(severity Severity, message string) {
-	severityString := severityStrings[severity]
-
 	fmt.Println(
 		colors[severity]+
 			time.Now().Format(time.DateTime),
-		severityString+": "+message,
+		message,
 		"\033[0m",
 	)
 }

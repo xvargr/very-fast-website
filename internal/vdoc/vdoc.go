@@ -119,7 +119,6 @@ func cloneNode(n *html.Node) *html.Node {
 }
 
 func (d *VirtualDocument) Merge(extr *VirtualExtractor) {
-	// fmt.Println("merge b4", d.RenderHtml())
 	d.doc.Find("outlet").Each(func(i int, s *goquery.Selection) {
 		s.ReplaceWithNodes(extr.ContentNodes...)
 	})
@@ -129,5 +128,4 @@ func (d *VirtualDocument) Merge(extr *VirtualExtractor) {
 	if extr.Meta.Title != "" {
 		d.doc.Find("title").Get(0).FirstChild.Data = extr.Meta.Title
 	}
-	// fmt.Println("merge after", d.RenderHtml())
 }
