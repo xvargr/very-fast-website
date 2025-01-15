@@ -73,8 +73,8 @@ func NewVirtualDocument() *VirtualDocument {
 	}
 }
 
-func (doc *VirtualDocument) RenderHtml() string {
-	html, err := doc.doc.Html()
+func (d *VirtualDocument) RenderHtml() string {
+	html, err := d.doc.Html()
 	if err != nil {
 		logger.Console(logger.SeverityError, "failed to generate html "+err.Error())
 	}
